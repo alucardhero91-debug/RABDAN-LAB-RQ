@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import { ShieldAlert, ExternalLink, Copy, Check, X, Globe, RefreshCw, AlertCircle, ArrowRight, Zap, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, ExternalLink, Copy, Check, X, Globe, RefreshCw, AlertCircle } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 interface UnauthorizedDomainModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRetryLogin?: () => void;
-  onSwitchToWebhook?: () => void;
 }
 
 export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = ({
   isOpen,
   onClose,
   onRetryLogin,
-  onSwitchToWebhook,
 }) => {
   const [copiedDomain, setCopiedDomain] = useState<string | null>(null);
   const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -58,29 +56,6 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
           </button>
         </div>
 
-        {/* Instant Solution Banner (Recommended: Metode 2 Webhook) */}
-        {onSwitchToWebhook && (
-          <div className="mt-3.5 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md space-y-2">
-            <div className="flex items-center gap-2 font-bold text-sm">
-              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-              <span>Solusi Instan: Gunakan Metode 2 (Tanpa Login!)</span>
-            </div>
-            <p className="text-xs text-emerald-50 leading-relaxed">
-              Anda <strong>tidak wajib login Google</strong> untuk menghubungkan Google Sheet. Metode 2 (Apps Script Webhook) berjalan langsung dari server ke Google Sheet Anda tanpa kendala domain atau popup sama sekali!
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onSwitchToWebhook();
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <span>Buka Metode 2: Apps Script (Rekomendasi)</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
 
         {/* 3 Reasons Why It Still Happened */}
         <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-slate-700 space-y-2 leading-relaxed">

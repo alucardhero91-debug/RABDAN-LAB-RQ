@@ -1,3 +1,5 @@
+import { LABRecord, TransaksiRecord } from '../types';
+
 /**
  * Utility functions for RAB & LAB Rumah Qur'an Ulul Azmi
  */
@@ -111,6 +113,26 @@ export function calculateLABBalance(
     totalMasuk,
     totalKeluar,
     saldoAkhir,
+  };
+}
+
+/**
+ * Computes an updated LABRecord with exact totalMasuk, totalKeluar, saldoAkhir,
+ * and trxCount calculated dynamically from matching transactions.
+ */
+export function computeLABRecord(
+  lab: LABRecord,
+  transactions: TransaksiRecord[]
+): LABRecord {
+  if (!lab) return lab;
+  const matchingTrx = (transactions || []).filter((t) => t.idLAB === lab.id);
+  const balance = calculateLABBalance(lab.saldoAwal, matchingTrx);
+  return {
+    ...lab,
+    totalMasuk: balance.totalMasuk,
+    totalKeluar: balance.totalKeluar,
+    saldoAkhir: balance.saldoAkhir,
+    trxCount: matchingTrx.length,
   };
 }
 

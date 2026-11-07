@@ -139,7 +139,7 @@ function drawOfficialKopSurat(doc: jsPDF): number {
  * ============================================================================
  */
 export function generateLABPDFBlob(
-  lab: LABRecord,
+  rawLab: LABRecord,
   transactions: TransaksiRecord[] = []
 ): { blob: Blob; url: string } {
   const doc = new jsPDF({
@@ -147,6 +147,21 @@ export function generateLABPDFBlob(
     unit: 'mm',
     format: 'a4',
   });
+
+  // Calculate real totals directly from transactions to guarantee 100% mathematical accuracy
+  const matchingTrx = (transactions || []).filter((t) => !t.idLAB || t.idLAB === rawLab.id);
+  const sumMasuk = matchingTrx.reduce((acc, t) => acc + (Number(t.masuk) || 0), 0);
+  const sumKeluar = matchingTrx.reduce((acc, t) => acc + (Number(t.keluar) || 0), 0);
+  const saldoAwal = Number(rawLab.saldoAwal) || 0;
+  const computedSaldoAkhir = saldoAwal + sumMasuk - sumKeluar;
+
+  const lab: LABRecord = {
+    ...rawLab,
+    totalMasuk: sumMasuk,
+    totalKeluar: sumKeluar,
+    saldoAkhir: computedSaldoAkhir,
+    trxCount: matchingTrx.length,
+  };
 
   const kota = lab.kota || 'Kibang Budi Jaya';
   const tglSurat = formatFullDate(lab.tanggal) || `${lab.bulan} ${lab.tahun}`;

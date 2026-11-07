@@ -6,6 +6,7 @@ import {
   formatRupiah,
   calculateRABTotal,
   calculateLABBalance,
+  computeLABRecord,
   formatTanggalIndonesia,
 } from './formatters';
 
@@ -56,4 +57,35 @@ test('calculateLABBalance computes saldo akhir correctly', () => {
 test('formatTanggalIndonesia formats ISO date correctly', () => {
   assert.equal(formatTanggalIndonesia('2026-11-03'), '3 November 2026');
   assert.equal(formatTanggalIndonesia('2025-01-15'), '15 Januari 2025');
+});
+
+test('computeLABRecord updates totalMasuk, totalKeluar, saldoAkhir, and trxCount accurately', () => {
+  const dummyLab = {
+    id: 'lab-1',
+    nomor: '001/YMU/RQ/XI/2026',
+    bulan: 'November',
+    tahun: 2026,
+    tanggal: '2026-11-01',
+    kota: 'Kibang Budi Jaya',
+    ketuaRQ: 'AL MUTAQIN',
+    bendaharaRQ: 'HAMIDAH FAUZIYAH',
+    saldoAwal: 5000000,
+    totalMasuk: 0,
+    totalKeluar: 0,
+    saldoAkhir: 5000000,
+    trxCount: 0,
+    hasLink: true,
+  };
+
+  const trxs = [
+    { id: 't1', idLAB: 'lab-1', tanggal: '2026-11-02', keterangan: 'Infaq', masuk: 1500000, keluar: 0 },
+    { id: 't2', idLAB: 'lab-1', tanggal: '2026-11-05', keterangan: 'Belanja ATK', masuk: 0, keluar: 500000 },
+    { id: 't3', idLAB: 'other-lab', tanggal: '2026-11-06', keterangan: 'Other', masuk: 200000, keluar: 0 },
+  ];
+
+  const computed = computeLABRecord(dummyLab, trxs as any);
+  assert.equal(computed.totalMasuk, 1500000);
+  assert.equal(computed.totalKeluar, 500000);
+  assert.equal(computed.saldoAkhir, 6000000);
+  assert.equal(computed.trxCount, 2);
 });

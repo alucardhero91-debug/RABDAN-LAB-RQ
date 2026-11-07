@@ -30,10 +30,9 @@ export const TabRAB: React.FC<TabRABProps> = ({
   const [autoGenPDF, setAutoGenPDF] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Dynamic RAB items
+  // Dynamic RAB items - start clean with no sample/dummy data
   const [items, setItems] = useState<RABItem[]>([
-    { id: '1', rincian: 'Bisyafahah & Honor Pengajar Al-Quran', jumlah: 4500000 },
-    { id: '2', rincian: 'Operasional Listrik, Air & Wifi', jumlah: 750000 },
+    { id: '1', rincian: '', jumlah: 0 },
   ]);
 
   const [resultCard, setResultCard] = useState<{
@@ -60,7 +59,7 @@ export const TabRAB: React.FC<TabRABProps> = ({
 
   const removeItem = (index: number) => {
     if (items.length <= 1) {
-      onNotify('RAB minimal memiliki 1 item kebutuhan', 'error');
+      setItems([{ id: Date.now().toString(), rincian: '', jumlah: 0 }]);
       return;
     }
     setItems((prev) => prev.filter((_, i) => i !== index));
@@ -141,6 +140,7 @@ export const TabRAB: React.FC<TabRABProps> = ({
           rab: created,
         });
       }
+      setItems([{ id: Date.now().toString(), rincian: '', jumlah: 0 }]);
     } catch (err: any) {
       onNotify('Gagal menyimpan RAB: ' + (err.message || 'Error'), 'error');
     } finally {

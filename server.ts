@@ -34,7 +34,7 @@ const DEFAULT_DB: DatabaseSchema = {
   sheetConfig: {
     spreadsheetName: 'Database Keuangan RQ Ulul Azmi (RAB & LAB)',
     spreadsheetId: '',
-    webAppUrl: 'https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec',
+    webAppUrl: '',
     lastSyncedAt: new Date().toISOString(),
     autoSync: true,
   },

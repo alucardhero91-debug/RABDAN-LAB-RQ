@@ -1,4 +1,5 @@
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
+import { computeLABRecord } from '../utils/formatters';
 import {
   getFirestoreAllData,
   saveFirestoreLAB,
@@ -83,67 +84,50 @@ export async function fetchSharedData(): Promise<{
       localStorage.setItem(SHEET_ID_KEY, resolvedConfig.spreadsheetId);
     }
 
-    if (
-      firestoreData.labList.length > 0 ||
-      firestoreData.rabList.length > 0 ||
-      firestoreData.transaksiList.length > 0 ||
-      resolvedConfig
-    ) {
-      saveLocalData(
-        firestoreData.labList,
-        firestoreData.rabList,
-        firestoreData.transaksiList
-      );
-      return {
-        labList: firestoreData.labList,
-        rabList: firestoreData.rabList,
-        transaksiList: firestoreData.transaksiList,
-        sheetConfig: resolvedConfig,
-      };
-    }
+    const computedLabs = firestoreData.labList.map((l) =>
+      computeLABRecord(l, firestoreData.transaksiList)
+    );
+    saveLocalData(
+      computedLabs,
+      firestoreData.rabList,
+      firestoreData.transaksiList
+    );
+    return {
+      labList: computedLabs,
+      rabList: firestoreData.rabList,
+      transaksiList: firestoreData.transaksiList,
+      sheetConfig: resolvedConfig,
+    };
   } catch (err) {
     console.warn('Firestore fetch notice, trying server fallback:', err);
   }
 
   // 2. Fallback to centralized server API
   if (serverData && serverData.ok) {
-    saveLocalData(serverData.labList, serverData.rabList, serverData.transaksiList);
+    const computedLabs = (serverData.labList || []).map((l: LABRecord) =>
+      computeLABRecord(l, serverData.transaksiList || [])
+    );
+    saveLocalData(computedLabs, serverData.rabList || [], serverData.transaksiList || []);
     if (serverData.sheetConfig?.spreadsheetId) {
       localStorage.setItem(SHEET_ID_KEY, serverData.sheetConfig.spreadsheetId);
     }
 
-    // Seed server data to Cloud Firestore if Firestore was empty
-    seedToFirestoreIfEmpty(serverData.labList, serverData.rabList, serverData.transaksiList);
-
     return {
-      labList: serverData.labList,
-      rabList: serverData.rabList,
-      transaksiList: serverData.transaksiList,
+      labList: computedLabs,
+      rabList: serverData.rabList || [],
+      transaksiList: serverData.transaksiList || [],
       sheetConfig: serverData.sheetConfig,
     };
   }
 
-  return { ...getLocalData(), sheetConfig: serverConfig };
-}
-
-async function seedToFirestoreIfEmpty(
-  labs: LABRecord[],
-  rabs: RABRecord[],
-  trxs: TransaksiRecord[]
-) {
-  try {
-    for (const l of labs) {
-      await saveFirestoreLAB(l);
-    }
-    for (const r of rabs) {
-      await saveFirestoreRAB(r);
-    }
-    for (const t of trxs) {
-      await saveFirestoreTransaksi(t);
-    }
-  } catch (e) {
-    // Non-blocking
-  }
+  const local = getLocalData();
+  const computedLocalLabs = local.labList.map((l) => computeLABRecord(l, local.transaksiList));
+  return {
+    labList: computedLocalLabs,
+    rabList: local.rabList,
+    transaksiList: local.transaksiList,
+    sheetConfig: serverConfig,
+  };
 }
 
 /**
@@ -176,8 +160,9 @@ export async function persistTransaksi(
 
   // Local fallback
   const local = getLocalData();
-  const updatedTrx = [trx, ...local.transaksiList];
-  saveLocalData(local.labList, local.rabList, updatedTrx);
+  const updatedTrx = [trx, ...local.transaksiList.filter((t) => t.id !== trx.id)];
+  const updatedLabs = local.labList.map((l) => computeLABRecord(l, updatedTrx));
+  saveLocalData(updatedLabs, local.rabList, updatedTrx);
   return { ok: true, syncedToSheets: false };
 }
 
@@ -212,7 +197,8 @@ export async function updateExistingTransaksi(
   // Local fallback
   const local = getLocalData();
   const updatedList = local.transaksiList.map((t) => (t.id === trx.id ? trx : t));
-  saveLocalData(local.labList, local.rabList, updatedList);
+  const updatedLabs = local.labList.map((l) => computeLABRecord(l, updatedList));
+  saveLocalData(updatedLabs, local.rabList, updatedList);
   return { ok: true, syncedToSheets: false };
 }
 
@@ -301,7 +287,8 @@ export async function deleteLocalTransaksi(idTrx: string): Promise<boolean> {
 
   const local = getLocalData();
   const updatedTrx = local.transaksiList.filter((t) => t.id !== idTrx);
-  saveLocalData(local.labList, local.rabList, updatedTrx);
+  const updatedLabs = local.labList.map((l) => computeLABRecord(l, updatedTrx));
+  saveLocalData(updatedLabs, local.rabList, updatedTrx);
   return true;
 }
 
@@ -358,10 +345,14 @@ export async function updateSheetConfig(config: {
   spreadsheetName?: string;
   spreadsheetId?: string;
   webAppUrl?: string;
+  adminPin?: string;
 }): Promise<boolean> {
   // 1. Immediately store to local storage
   if (config.spreadsheetId) {
     localStorage.setItem(SHEET_ID_KEY, config.spreadsheetId);
+  }
+  if (config.adminPin) {
+    localStorage.setItem('rq_fia_admin_pin', config.adminPin);
   }
 
   // 2. Save permanently to Cloud Firestore

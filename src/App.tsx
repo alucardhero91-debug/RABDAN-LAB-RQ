@@ -12,6 +12,7 @@ import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { EditTransaksiModal } from './components/EditTransaksiModal';
 import { FinancialSummaryBanner } from './components/FinancialSummaryBanner';
 import { LABRecord, RABRecord, TransaksiRecord } from './types';
+import { computeLABRecord } from './utils/formatters';
 import {
   fetchSharedData,
   persistLAB,
@@ -38,7 +39,6 @@ export default function App() {
   });
   const [isSheetModalOpen, setIsSheetModalOpen] = useState<boolean>(false);
   const [isUnauthorizedModalOpen, setIsUnauthorizedModalOpen] = useState<boolean>(false);
-  const [sheetModalInitialTab, setSheetModalInitialTab] = useState<'direct' | 'webhook' | 'backup'>('webhook');
 
   // Auth state for direct Google Sheets API connection
   const [user, setUser] = useState<User | null>(null);
@@ -102,19 +102,19 @@ export default function App() {
     try {
       const data = await fetchSharedData();
       if (data) {
-        if (data.labList && data.labList.length > 0) setLabList(data.labList);
-        if (data.rabList && data.rabList.length > 0) setRabList(data.rabList);
-        if (data.transaksiList && data.transaksiList.length > 0) setTransaksiList(data.transaksiList);
+        setLabList(data.labList || []);
+        setRabList(data.rabList || []);
+        setTransaksiList(data.transaksiList || []);
         if (data.sheetConfig) {
           if (data.sheetConfig.spreadsheetName) {
             setSheetTitle(data.sheetConfig.spreadsheetName);
           }
-          if (data.sheetConfig.webAppUrl) {
-            setWebAppUrl(data.sheetConfig.webAppUrl);
-          }
           if (data.sheetConfig.spreadsheetId) {
             setSpreadsheetId(data.sheetConfig.spreadsheetId);
             localStorage.setItem(SHEET_ID_KEY, data.sheetConfig.spreadsheetId);
+          }
+          if (data.sheetConfig.adminPin) {
+            localStorage.setItem('rq_fia_admin_pin', data.sheetConfig.adminPin);
           }
         }
       }
@@ -135,11 +135,9 @@ export default function App() {
 
     // Real-time Firestore subscription for instantaneous synchronization across all devices
     const unsubscribeFirestore = subscribeToFirestoreData((data) => {
-      if (data.labList.length > 0 || data.rabList.length > 0 || data.transaksiList.length > 0) {
-        setLabList(data.labList);
-        setRabList(data.rabList);
-        setTransaksiList(data.transaksiList);
-      }
+      setLabList(data.labList || []);
+      setRabList(data.rabList || []);
+      setTransaksiList(data.transaksiList || []);
       if (data.sheetConfig) {
         if (data.sheetConfig.spreadsheetId) {
           setSpreadsheetId(data.sheetConfig.spreadsheetId);
@@ -148,8 +146,8 @@ export default function App() {
         if (data.sheetConfig.spreadsheetName) {
           setSheetTitle(data.sheetConfig.spreadsheetName);
         }
-        if (data.sheetConfig.webAppUrl) {
-          setWebAppUrl(data.sheetConfig.webAppUrl);
+        if (data.sheetConfig.adminPin) {
+          localStorage.setItem('rq_fia_admin_pin', data.sheetConfig.adminPin);
         }
       }
     });
@@ -221,6 +219,12 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
+    // Optimistically update React state immediately
+    const nextTrxList = [newTrx, ...transaksiList];
+    const nextLabList = labList.map((l) => computeLABRecord(l, nextTrxList));
+    setTransaksiList(nextTrxList);
+    setLabList(nextLabList);
+
     const res = await persistTransaksi(newTrx);
 
     // Direct write to Google Sheets if connected via Google Sheets API
@@ -238,7 +242,8 @@ export default function App() {
     }
 
     await loadSharedData(true);
-    return { idLAB: data.idLAB, updatedLAB: res.updatedLAB };
+    const calculatedTargetLab = nextLabList.find((l) => l.id === data.idLAB);
+    return { idLAB: data.idLAB, updatedLAB: calculatedTargetLab || res.updatedLAB };
   };
 
   const handleSubmitLAB = async (
@@ -336,6 +341,11 @@ export default function App() {
       title: 'Hapus Catatan Transaksi?',
       message: `Apakah Anda yakin ingin menghapus transaksi "${trx.keterangan}" sebesar ${trx.masuk > 0 ? 'Rp ' + trx.masuk.toLocaleString('id-ID') : 'Rp ' + trx.keluar.toLocaleString('id-ID')}? Tindakan ini akan memperbarui saldo kas untuk semua pengguna.`,
       onConfirm: async () => {
+        const nextTrxList = transaksiList.filter((t) => t.id !== trx.id);
+        const nextLabList = labList.map((l) => computeLABRecord(l, nextTrxList));
+        setTransaksiList(nextTrxList);
+        setLabList(nextLabList);
+
         await deleteLocalTransaksi(trx.id);
         await loadSharedData(true);
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -378,6 +388,11 @@ export default function App() {
   };
 
   const handleSaveEditTransaksi = async (updatedTrx: TransaksiRecord) => {
+    const nextTrxList = transaksiList.map((t) => (t.id === updatedTrx.id ? updatedTrx : t));
+    const nextLabList = labList.map((l) => computeLABRecord(l, nextTrxList));
+    setTransaksiList(nextTrxList);
+    setLabList(nextLabList);
+
     await updateExistingTransaksi(updatedTrx);
     await loadSharedData(true);
     showToast('Transaksi berhasil diperbarui', 'success');
@@ -386,16 +401,16 @@ export default function App() {
   const handleResetDatabase = () => {
     setConfirmModal({
       isOpen: true,
-      title: 'Kosongkan Semua Data Contoh?',
+      title: 'Kosongkan Semua Data Database?',
       message:
-        'PERINGATAN: Tindakan ini akan mengosongkan seluruh data demo (LAB, RAB, Transaksi) di server dan Firestore. Gunakan ini jika Anda ingin memulai pencatatan dari data yang benar-benar kosong.',
+        'PERINGATAN: Tindakan ini akan mengosongkan seluruh data Transaksi, LAB, dan RAB di cloud dan server agar database kembali 100% bersih tanpa data apapun. Lanjutkan?',
       onConfirm: async () => {
         await clearAllData();
         setLabList([]);
         setRabList([]);
         setTransaksiList([]);
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        showToast('Semua data contoh berhasil dikosongkan. Database siap digunakan!', 'success');
+        showToast('Semua data berhasil dikosongkan. Database 100% bersih dan siap digunakan!', 'success');
       },
     });
   };
@@ -552,7 +567,6 @@ export default function App() {
         transaksiList={transaksiList}
         rabList={rabList}
         onOpenUnauthorizedDomainGuide={() => setIsUnauthorizedModalOpen(true)}
-        initialTab={sheetModalInitialTab}
         onResetData={handleResetDatabase}
       />
 
@@ -568,10 +582,6 @@ export default function App() {
         isOpen={isUnauthorizedModalOpen}
         onClose={() => setIsUnauthorizedModalOpen(false)}
         onRetryLogin={handleGoogleLogin}
-        onSwitchToWebhook={() => {
-          setSheetModalInitialTab('webhook');
-          setIsSheetModalOpen(true);
-        }}
       />
 
       <EditTransaksiModal

@@ -85,11 +85,20 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
         onNotify(msg + ' — Membuat PDF LAB...', 'success');
         const targetLab = res.updatedLAB || labList.find((l) => l.id === res.idLAB);
         if (targetLab) {
-          const matchingTrx = transaksiList.filter((t) => t.idLAB === res.idLAB);
-          const pdf = generateLABPDFBlob(targetLab, matchingTrx);
+          const submittedTrx: TransaksiRecord = {
+            id: 'trx-new-' + Date.now(),
+            idLAB: res.idLAB,
+            tanggal,
+            keterangan: keterangan.trim(),
+            masuk: valMasuk,
+            keluar: valKeluar,
+          };
+          const existingMatching = transaksiList.filter((t) => t.idLAB === res.idLAB);
+          const allMatching = [submittedTrx, ...existingMatching];
+          const pdf = generateLABPDFBlob(targetLab, allMatching);
           setResultCard({
             show: true,
-            msg: msg + ' + PDF jadi',
+            msg: msg + ' + PDF resmi terbit',
             pdfUrl: pdf.url,
             idLAB: res.idLAB,
           });

@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
+import { computeLABRecord } from '../utils/formatters';
 
 export const LAB_COLLECTION = 'lab';
 export const TRANSAKSI_COLLECTION = 'transaksi';
@@ -20,6 +21,7 @@ export interface SheetConfigData {
   spreadsheetName?: string;
   spreadsheetId?: string;
   webAppUrl?: string;
+  adminPin?: string;
   updatedAt?: string;
 }
 
@@ -29,16 +31,16 @@ export interface SheetConfigData {
 export async function saveFirestoreSheetConfig(config: SheetConfigData): Promise<void> {
   const docRef = doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID);
   try {
-    await setDoc(
-      docRef,
-      {
-        spreadsheetName: config.spreadsheetName || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)',
-        spreadsheetId: config.spreadsheetId || '',
-        webAppUrl: config.webAppUrl || '',
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    const payload: Record<string, any> = {
+      spreadsheetName: config.spreadsheetName || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)',
+      spreadsheetId: config.spreadsheetId || '',
+      webAppUrl: config.webAppUrl || '',
+      updatedAt: new Date().toISOString(),
+    };
+    if (config.adminPin) {
+      payload.adminPin = config.adminPin;
+    }
+    await setDoc(docRef, payload, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COLLECTION}/${SHEET_CONFIG_DOC_ID}`);
   }
@@ -78,11 +80,12 @@ export async function getFirestoreAllData(): Promise<{
       getDoc(doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID)),
     ]);
 
-    const labList = labSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LABRecord));
+    const rawLabList = labSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LABRecord));
     const rabList = rabSnap.docs.map((d) => ({ id: d.id, ...d.data() } as RABRecord));
     const transaksiList = trxSnap.docs.map(
       (d) => ({ id: d.id, ...d.data() } as TransaksiRecord)
     );
+    const labList = rawLabList.map((l) => computeLABRecord(l, transaksiList));
     const sheetConfig = configSnap.exists() ? (configSnap.data() as SheetConfigData) : undefined;
 
     return { labList, rabList, transaksiList, sheetConfig };
@@ -109,8 +112,9 @@ export function subscribeToFirestoreData(
   let currentConfig: SheetConfigData | undefined = undefined;
 
   const triggerUpdate = () => {
+    const computedLabs = currentLab.map((l) => computeLABRecord(l, currentTrx));
     onUpdate({
-      labList: currentLab,
+      labList: computedLabs,
       rabList: currentRab,
       transaksiList: currentTrx,
       sheetConfig: currentConfig,
